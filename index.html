@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Poruwe Admin</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Italiana&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="wm">Poruwe</div>
+    <div class="sub">Admin Console</div>
+    <div class="login-err" id="loginErr"></div>
+    <input type="password" id="loginPass" placeholder="Admin password" autocomplete="current-password" />
+    <button class="btn btn-gold" style="width:100%" id="loginBtn">Sign in</button>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div class="shell" id="shell">
+  <aside class="side" id="side">
+    <div class="wm">Poruwe</div>
+    <div class="tag">Admin Console</div>
+    <button class="nav-item cur" data-view="dashboard">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
+      Dashboard</button>
+    <button class="nav-item" data-view="orders">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h12l2 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/><path d="M4 7h16M9 11a3 3 0 0 0 6 0"/></svg>
+      Orders</button>
+    <button class="nav-item" data-view="templates">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>
+      Templates</button>
+    <button class="nav-item" data-view="settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>
+      Settings</button>
+    <div class="spacer"></div>
+    <button class="nav-item" id="logoutBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      Sign out</button>
+  </aside>
+
+  <main class="main">
+    <div class="mhead">
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="burger" id="burger">☰</button>
+        <div><h1 id="viewTitle">Dashboard</h1><div class="sub" id="viewSub"></div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <a class="btn btn-ghost btn-sm" id="openSite" target="_blank" rel="noopener">Open site ↗</a>
+        <button class="btn btn-line btn-sm" id="refreshBtn">Refresh</button>
+      </div>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<!-- drawer -->
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-h"><h2 id="drawerTitle">Order</h2><button class="x" id="drawerClose">×</button></div>
+  <div class="drawer-b" id="drawerBody"></div>
+  <div class="actbar" id="drawerActions"></div>
+</div>
+
+<div id="toast"></div>
+<div id="lightbox"><img id="lightboxImg" alt="" /></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
