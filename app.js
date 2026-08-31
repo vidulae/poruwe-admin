@@ -59,7 +59,11 @@
   $('#loginPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginBtn').click(); });
   $('#logoutBtn').onclick = logout;
   $('#openSite').href = API;
-  $('#burger') && ($('#burger').onclick = () => $('#side').classList.toggle('open'));
+  $('#burger') && ($('#burger').onclick = (e) => { e.stopPropagation(); $('#side').classList.toggle('open'); });
+  document.addEventListener('click', (e) => {
+    const side = $('#side');
+    if (side.classList.contains('open') && !side.contains(e.target)) side.classList.remove('open');
+  });
   $('#refreshBtn').onclick = () => go(view);
 
   /* ------------------------------ navigation ----------------------------- */
@@ -99,7 +103,7 @@
   /* -------------------------------- orders ------------------------------- */
   function ordersTable(rows) {
     if (!rows.length) return '<div class="empty">No orders yet — they will appear here the moment someone starts building.</div>';
-    return `<div style="overflow-x:auto"><table><thead><tr><th>Order</th><th>Couple</th><th>Template</th><th>Status</th><th>Amount</th><th>Wedding</th><th>Created</th></tr></thead><tbody>
+    const table = `<div class="otable" style="overflow-x:auto"><table><thead><tr><th>Order</th><th>Couple</th><th>Template</th><th>Status</th><th>Amount</th><th>Wedding</th><th>Created</th></tr></thead><tbody>
       ${rows.map((o) => {
         const c = (o.data && o.data.couple) || {};
         return `<tr data-oid="${o.id}"><td class="mono">${esc(o.order_no)}</td><td>${esc(c.groom || '—')} & ${esc(c.bride || '—')}</td><td>${esc(o.template_id)}</td>
@@ -107,6 +111,15 @@
           <td>${o.payment && o.payment.amount != null ? LKR(o.payment.amount) : '—'}</td>
           <td>${o.wedding_date ? String(o.wedding_date).slice(0, 10) : '—'}</td><td>${fdate(o.created_at)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
+    const cards = `<div class="ocards">
+      ${rows.map((o) => {
+        const c = (o.data && o.data.couple) || {};
+        return `<div class="ocard" data-oid="${o.id}">
+          <div class="row1"><span class="names">${esc(c.groom || '—')} &amp; ${esc(c.bride || '—')}</span><span class="chip c-${o.status}">${STATUS_LABEL[o.status] || o.status}</span></div>
+          <div class="row2"><span class="mono">${esc(o.order_no)}</span><span>${esc(o.template_id)}</span><span>${o.payment && o.payment.amount != null ? LKR(o.payment.amount) : '—'}</span></div>
+        </div>`;
+      }).join('')}</div>`;
+    return table + cards;
   }
   function bindOrderRows(rows) {
     document.querySelectorAll('[data-oid]').forEach((tr) => tr.onclick = () => openDrawer(tr.dataset.oid));
