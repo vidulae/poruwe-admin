@@ -12,6 +12,43 @@
   let view = 'dashboard';
   let ordersState = { status: '', kind: '', q: '', rows: [], total: 0 };
   let templatesCache = [];
+  let settingsCache = null;
+
+  async function refData() {
+    if (!settingsCache) settingsCache = await api('/api/admin/settings').catch(() => ({}));
+    if (!templatesCache.length) templatesCache = await api('/api/admin/templates').catch(() => []);
+  }
+
+  // Professional, status-aware WhatsApp message to the ordering customer
+  function waMessage(o, liveUrl) {
+    const d = o.data || {}, cu = d.customer || {}, tpl = templatesCache.find((t) => t.id === o.template_id) || {};
+    const price = LKR(o.payment && o.payment.amount != null ? o.payment.amount : tpl.price_lkr);
+    const hello = `Hello${cu.name ? ' ' + cu.name : ''}! 💍 This is Poruwe, about your wedding invitation order ${o.order_no} (${tpl.name || o.template_id} · ${price}).`;
+    const b = (settingsCache && settingsCache.bank) || {};
+    const bankBlock = b.accountNumber
+      ? `\n\nBank transfer details:\n• Account name: ${b.accountName}\n• Bank: ${b.bank}\n• Branch: ${b.branch}\n• Account number: ${b.accountNumber}\n• Amount: ${price}`
+      : '';
+    const statusUrl = `${API}/status/${o.token}`;
+    const builderUrl = `${API}/b/${o.token}`;
+    const proof = o.payment && (o.payment.reference || o.payment.slipImage);
+    if (o.status === 'draft') {
+      return `${hello}\n\nYour draft is saved — continue building here:\n${builderUrl}${bankBlock}\n\nOnce you transfer, simply send the payment slip in this chat and we'll publish your invitation. Your order page: ${statusUrl}`;
+    }
+    if (o.status === 'pending_verification' && !proof) {
+      return `${hello}\n\nThank you for submitting your order!${bankBlock}\n\nPlease send the payment slip in this chat (or attach it on your order page) and we'll verify and publish right away.\nOrder page: ${statusUrl}`;
+    }
+    if (o.status === 'pending_verification') {
+      return `${hello}\n\nWe've received your payment details and are verifying now — your invitation goes live shortly. Watch it appear here:\n${statusUrl}\n\nThank you!`;
+    }
+    if (o.status === 'active') {
+      return `🎉 Wonderful news${cu.name ? ', ' + cu.name : ''}! Your wedding invitation is LIVE.\n\n${o.kind === 'website' && liveUrl ? `Share it with your guests:\n${liveUrl}` : 'Download it from your order page below.'}\n\nYour order page — receipt, downloads and status (please keep this link safe):\n${statusUrl}\n\nIt stays live until 3 days after your wedding; afterwards every detail is automatically and permanently removed. With warm wishes, Poruwe`;
+    }
+    if (o.status === 'rejected') {
+      const reason = (o.payment && o.payment.rejectReason) || 'we could not verify the payment';
+      return `${hello}\n\nAbout your payment: ${reason}.${bankBlock}\n\nYou can update your order and resubmit here:\n${builderUrl}\n\nOr just reply in this chat and we'll sort it out quickly.`;
+    }
+    return `${hello}\n\nYour order page: ${statusUrl}`;
+  }
 
   function toast(msg, err) {
     const t = $('#toast');
@@ -184,7 +221,7 @@
     $('#drawerBody').innerHTML = '';
     $('#drawerActions').innerHTML = '';
     let j;
-    try { j = await api('/api/admin/orders/' + id); } catch (e) { $('#drawerBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    try { await refData(); j = await api('/api/admin/orders/' + id); } catch (e) { $('#drawerBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
     const o = j.order, d = o.data || {}, c = d.couple || {}, cu = d.customer || {}, p = o.payment || {};
     $('#drawerTitle').textContent = `${o.order_no} · ${STATUS_LABEL[o.status] || o.status}`;
     const photoIds = Object.entries(d.photos || {}).filter(([, v]) => v);
@@ -220,6 +257,13 @@
     $('#drawerBody').querySelectorAll('[data-zoom]').forEach((im) => im.onclick = () => { $('#lightboxImg').src = im.dataset.zoom; $('#lightbox').classList.add('on'); });
 
     const acts = [];
+    if (cu.wa) {
+      const waLabel = o.status === 'active' ? 'WhatsApp: share live link'
+        : o.status === 'pending_verification' && !(p.reference || p.slipImage) ? 'WhatsApp: send bank details'
+        : o.status === 'draft' ? 'WhatsApp: details & next steps'
+        : 'WhatsApp the customer';
+      acts.push(`<button class="btn btn-line" data-act="whatsapp">${waLabel}</button>`);
+    }
     if (['pending_verification', 'pending_payment', 'draft', 'rejected'].includes(o.status)) acts.push(`<button class="btn btn-gold" data-act="approve">Approve & activate</button>`);
     if (['pending_verification', 'pending_payment'].includes(o.status)) acts.push(`<button class="btn btn-red" data-act="reject">Reject</button>`);
     if (o.status === 'active') {
@@ -227,6 +271,7 @@
       acts.push(`<button class="btn btn-red" data-act="revoke">Revoke & purge</button>`);
       if (liveUrl) acts.push(`<button class="btn btn-ghost" data-act="copy">Copy link</button>`);
     }
+    if (o.slug !== 'demo' && o.status !== 'active') acts.push(`<button class="btn btn-ghost" data-act="delete">Delete order</button>`);
     $('#drawerActions').innerHTML = acts.join('');
     $('#drawerActions').querySelectorAll('[data-act]').forEach((b) => b.onclick = () => doAction(o, b.dataset.act, liveUrl));
   }
@@ -234,6 +279,19 @@
   async function doAction(o, act, liveUrl) {
     try {
       if (act === 'copy') { await navigator.clipboard.writeText(liveUrl); return toast('Link copied'); }
+      if (act === 'whatsapp') {
+        const cu = (o.data || {}).customer || {};
+        window.open(`https://wa.me/${cu.wa}?text=${encodeURIComponent(waMessage(o, liveUrl))}`, '_blank', 'noopener');
+        return;
+      }
+      if (act === 'delete') {
+        if (!confirm(`Permanently delete ${o.order_no}? Every detail and image is removed — this cannot be undone.`)) return;
+        await api(`/api/admin/orders/${o.id}`, { method: 'DELETE' });
+        toast('Order deleted');
+        closeDrawer();
+        if (view === 'orders') loadOrders(); else renderDashboard();
+        return;
+      }
       if (act === 'approve') {
         const j = await api(`/api/admin/orders/${o.id}/approve`, { method: 'POST' });
         toast(`Activated — ${j.order.slug ? 'live at /i/' + j.order.slug : 'deliverable unlocked'}`);
@@ -308,6 +366,7 @@
           <div class="f"><label>Merchant ID</label><input id="sPhId" value="${esc(ph.merchantId || '')}" placeholder="Leave blank to disable" /></div>
           <div class="f"><label>Merchant secret</label><input id="sPhSecret" type="password" value="${esc(ph.merchantSecret || '')}" /></div>
         </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="switch ${ph.enabled ? 'on' : ''}" id="sPhEnabled"></div><span style="font-size:.78rem;color:var(--muted)"><b style="color:var(--text)">Show PayHere to customers</b> — while off, they see “Card payments — coming soon”. Turn on only after entering live credentials above.</span></div>
         <div style="display:flex;align-items:center;gap:12px"><div class="switch ${ph.sandbox ? 'on' : ''}" id="sPhSandbox"></div><span style="font-size:.78rem;color:var(--muted)">Sandbox mode (turn off when your PayHere account is live)</span></div>
         <p style="font-size:.74rem;color:var(--muted);margin-top:12px">Stripe: planned — a US Stripe account can be plugged into the platform's payment adapter without changing anything else.</p>
       </div></div>
@@ -319,16 +378,20 @@
       </div></div>
       <button class="btn btn-gold" id="saveSettings">Save all settings</button>`;
     $('#sPhSandbox').onclick = () => $('#sPhSandbox').classList.toggle('on');
+    $('#sPhEnabled').onclick = () => $('#sPhEnabled').classList.toggle('on');
     $('#saveSettings').onclick = async () => {
       try {
+        const enabled = $('#sPhEnabled').classList.contains('on');
+        if (enabled && !$('#sPhId').value.trim()) return toast('Enter the PayHere Merchant ID before switching it on', true);
         const body = {
           bank: { accountName: $('#sBankName').value, bank: $('#sBank').value, branch: $('#sBranch').value, accountNumber: $('#sAccNo').value },
-          payhere: { merchantId: $('#sPhId').value, merchantSecret: $('#sPhSecret').value, sandbox: $('#sPhSandbox').classList.contains('on') },
+          payhere: { merchantId: $('#sPhId').value, merchantSecret: $('#sPhSecret').value, sandbox: $('#sPhSandbox').classList.contains('on'), enabled },
           supportWhatsapp: $('#sSupport').value,
         };
         const np = $('#sNewPass').value;
         if (np) body.newAdminPassword = np;
         await api('/api/admin/settings', { method: 'PUT', body });
+        settingsCache = null;
         toast('Settings saved');
         if (np) { toast('Password changed — sign in again'); setTimeout(logout, 1200); }
       } catch (e) { toast(e.message, true); }
