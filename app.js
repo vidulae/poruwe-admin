@@ -357,20 +357,46 @@
     $('#view').innerHTML = '<div class="empty">Loading…</div>';
     let rows;
     try { rows = await api('/api/admin/testimonials'); } catch (e) { $('#view').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-    if (!rows.length) { $('#view').innerHTML = '<div class="empty">No reviews yet — couples are invited to leave one on their order page once their invitation is live.</div>'; return; }
-    $('#view').innerHTML = `<div class="card"><div class="card-h"><h3>Customer reviews</h3><span style="color:var(--muted);font-size:.74rem">${rows.filter((r) => r.visible).length} visible of ${rows.length}</span></div>
-      <div class="rvlist">${rows.map((r) => `
-        <div class="rvrow" style="display:flex;gap:16px;align-items:flex-start;padding:18px 22px;border-top:1px solid var(--line)">
-          <div style="flex:1;min-width:0">
-            <div style="color:var(--gold);letter-spacing:3px;font-size:.85rem">${'★'.repeat(r.rating)}<span style="opacity:.25">${'★'.repeat(5 - r.rating)}</span></div>
-            <div style="color:var(--text);font-size:.95rem;font-style:italic;margin:7px 0 6px">“${esc(r.text)}”</div>
-            <div style="color:var(--muted);font-size:.72rem">${esc(r.author)}${r.couple ? ' · ' + esc(r.couple) : ''}${r.template_id ? ' · ' + esc(r.template_id) : ''} · ${fdate(r.created_at)}</div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
-            <div class="switch ${r.visible ? 'on' : ''}" data-rvis="${r.id}" title="Visible on landing page"></div>
-            <button class="btn btn-ghost btn-sm" data-rdel="${r.id}">Delete</button>
-          </div>
-        </div>`).join('')}</div></div>`;
+    await refData();
+    const addForm = `<div class="card"><div class="card-h"><h3>Add a review yourself</h3></div><div style="padding:20px 22px">
+      <div class="frow2">
+        <div class="f"><label>Author (shown)</label><input id="nrAuthor" placeholder="e.g. Sachini & Ravindu" /></div>
+        <div class="f"><label>Couple / context (small line)</label><input id="nrCouple" placeholder="optional" /></div>
+        <div class="f"><label>Template</label><select id="nrTpl"><option value="">—</option>${templatesCache.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></div>
+        <div class="f"><label>Stars</label><select id="nrStars"><option>5</option><option>4</option><option>3</option></select></div>
+      </div>
+      <div class="f"><label>Review text</label><input id="nrText" placeholder="What they said…" /></div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:4px">
+        <button class="btn btn-gold btn-sm" id="nrAdd">Add review</button>
+        <span style="font-size:.72rem;color:var(--muted)">Added reviews go live immediately (visible switch stays in your control below).</span>
+      </div>
+    </div></div>`;
+    const listCard = rows.length
+      ? `<div class="card"><div class="card-h"><h3>Customer reviews</h3><span style="color:var(--muted);font-size:.74rem">${rows.filter((r) => r.visible).length} visible of ${rows.length}</span></div>
+        <div class="rvlist">${rows.map((r) => `
+          <div class="rvrow" style="display:flex;gap:16px;align-items:flex-start;padding:18px 22px;border-top:1px solid var(--line)">
+            <div style="flex:1;min-width:0">
+              <div style="color:var(--gold);letter-spacing:3px;font-size:.85rem">${'★'.repeat(r.rating)}<span style="opacity:.25">${'★'.repeat(5 - r.rating)}</span></div>
+              <div style="color:var(--text);font-size:.95rem;font-style:italic;margin:7px 0 6px">“${esc(r.text)}”</div>
+              <div style="color:var(--muted);font-size:.72rem">${esc(r.author)}${r.couple ? ' · ' + esc(r.couple) : ''}${r.template_id ? ' · ' + esc(r.template_id) : ''} · ${fdate(r.created_at)}</div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
+              <div class="switch ${r.visible ? 'on' : ''}" data-rvis="${r.id}" title="Visible on landing page"></div>
+              <button class="btn btn-ghost btn-sm" data-rdel="${r.id}">Delete</button>
+            </div>
+          </div>`).join('')}</div></div>`
+      : '<div class="card"><div class="card-h"><h3>Customer reviews</h3></div><div class="empty">No customer reviews yet — couples are invited to leave one on their order page once their invitation is live.</div></div>';
+    $('#view').innerHTML = addForm + listCard;
+    $('#nrAdd').onclick = async () => {
+      try {
+        await api('/api/admin/testimonials', { method: 'POST', body: {
+          author: $('#nrAuthor').value.trim(), couple: $('#nrCouple').value.trim(), template_id: $('#nrTpl').value,
+          rating: +$('#nrStars').value, text: $('#nrText').value.trim(), visible: true,
+        } });
+        toast('Review added & visible');
+        renderReviews();
+      } catch (e) { toast(e.message, true); }
+    };
     document.querySelectorAll('[data-rvis]').forEach((s) => s.onclick = async () => {
       try {
         const j = await api(`/api/admin/testimonials/${s.dataset.rvis}`, { method: 'PUT', body: { visible: !s.classList.contains('on') } });
