@@ -108,9 +108,9 @@
   function go(v) {
     view = v;
     document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('cur', b.dataset.view === v));
-    $('#viewTitle').textContent = { dashboard: 'Dashboard', orders: 'Orders', templates: 'Templates', settings: 'Settings' }[v];
+    $('#viewTitle').textContent = { dashboard: 'Dashboard', orders: 'Orders', templates: 'Templates', reviews: 'Reviews', settings: 'Settings' }[v];
     $('#viewSub').textContent = '';
-    ({ dashboard: renderDashboard, orders: renderOrders, templates: renderTemplates, settings: renderSettings })[v]();
+    ({ dashboard: renderDashboard, orders: renderOrders, templates: renderTemplates, reviews: renderReviews, settings: renderSettings })[v]();
   }
 
   /* ------------------------------ dashboard ------------------------------ */
@@ -323,12 +323,13 @@
     $('#viewSub').textContent = 'Prices update instantly across the site';
     $('#view').innerHTML = '<div class="empty">Loading…</div>';
     try { templatesCache = await api('/api/admin/templates'); } catch (e) { $('#view').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-    $('#view').innerHTML = `<div class="card"><div class="card-h"><h3>Template catalogue</h3></div>
-      <div style="overflow-x:auto"><table><thead><tr><th>Template</th><th>Kind</th><th>Tier</th><th>Price (LKR)</th><th>Visible</th><th></th></tr></thead><tbody>
+    $('#view').innerHTML = `<div class="card"><div class="card-h"><h3>Template catalogue</h3><span style="color:var(--muted);font-size:.72rem">A discount below the price shows as a strikethrough deal everywhere; clear it to end the offer</span></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Template</th><th>Kind</th><th>Tier</th><th>Price (LKR)</th><th>Discount (LKR)</th><th>Visible</th><th></th></tr></thead><tbody>
       ${templatesCache.map((t) => `<tr style="cursor:default">
         <td><b style="color:var(--cream)">${esc(t.name)}</b><br><span style="color:var(--muted);font-size:.72rem">${esc(t.tagline || '')}</span></td>
         <td>${esc(t.kind)}</td><td>${esc(t.tier)}</td>
-        <td><input type="number" min="0" step="100" value="${t.price_lkr}" data-price="${t.id}" style="width:110px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:8px 10px" /></td>
+        <td><input type="number" min="0" step="100" value="${t.price_lkr}" data-price="${t.id}" style="width:104px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:8px 10px" /></td>
+        <td><input type="number" min="0" step="100" value="${t.discount_lkr || ''}" placeholder="—" data-discount="${t.id}" style="width:104px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:8px 10px" /></td>
         <td><div class="switch ${t.active ? 'on' : ''}" data-active="${t.id}"></div></td>
         <td><button class="btn btn-line btn-sm" data-savetpl="${t.id}">Save</button></td></tr>`).join('')}
       </tbody></table></div></div>`;
@@ -336,12 +337,50 @@
     document.querySelectorAll('[data-savetpl]').forEach((b) => b.onclick = async () => {
       const id = b.dataset.savetpl;
       try {
+        const price = +document.querySelector(`[data-price="${id}"]`).value;
+        const discRaw = document.querySelector(`[data-discount="${id}"]`).value.trim();
+        const discount = discRaw === '' ? null : +discRaw;
+        if (discount != null && discount >= price) return toast('Discount must be below the price (or empty to clear)', true);
         await api(`/api/admin/templates/${id}`, { method: 'PUT', body: {
-          price_lkr: +document.querySelector(`[data-price="${id}"]`).value,
+          price_lkr: price,
+          discount_lkr: discount,
           active: document.querySelector(`[data-active="${id}"]`).classList.contains('on'),
         } });
         toast('Template updated');
       } catch (e) { toast(e.message, true); }
+    });
+  }
+
+  /* -------------------------------- reviews ------------------------------ */
+  async function renderReviews() {
+    $('#viewSub').textContent = 'Switch a review on to feature it on the landing page';
+    $('#view').innerHTML = '<div class="empty">Loading…</div>';
+    let rows;
+    try { rows = await api('/api/admin/testimonials'); } catch (e) { $('#view').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    if (!rows.length) { $('#view').innerHTML = '<div class="empty">No reviews yet — couples are invited to leave one on their order page once their invitation is live.</div>'; return; }
+    $('#view').innerHTML = `<div class="card"><div class="card-h"><h3>Customer reviews</h3><span style="color:var(--muted);font-size:.74rem">${rows.filter((r) => r.visible).length} visible of ${rows.length}</span></div>
+      <div class="rvlist">${rows.map((r) => `
+        <div class="rvrow" style="display:flex;gap:16px;align-items:flex-start;padding:18px 22px;border-top:1px solid var(--line)">
+          <div style="flex:1;min-width:0">
+            <div style="color:var(--gold);letter-spacing:3px;font-size:.85rem">${'★'.repeat(r.rating)}<span style="opacity:.25">${'★'.repeat(5 - r.rating)}</span></div>
+            <div style="color:var(--text);font-size:.95rem;font-style:italic;margin:7px 0 6px">“${esc(r.text)}”</div>
+            <div style="color:var(--muted);font-size:.72rem">${esc(r.author)}${r.couple ? ' · ' + esc(r.couple) : ''}${r.template_id ? ' · ' + esc(r.template_id) : ''} · ${fdate(r.created_at)}</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
+            <div class="switch ${r.visible ? 'on' : ''}" data-rvis="${r.id}" title="Visible on landing page"></div>
+            <button class="btn btn-ghost btn-sm" data-rdel="${r.id}">Delete</button>
+          </div>
+        </div>`).join('')}</div></div>`;
+    document.querySelectorAll('[data-rvis]').forEach((s) => s.onclick = async () => {
+      try {
+        const j = await api(`/api/admin/testimonials/${s.dataset.rvis}`, { method: 'PUT', body: { visible: !s.classList.contains('on') } });
+        s.classList.toggle('on', j.visible);
+        toast(j.visible ? 'Review is now on the landing page' : 'Review hidden');
+      } catch (e) { toast(e.message, true); }
+    });
+    document.querySelectorAll('[data-rdel]').forEach((b) => b.onclick = async () => {
+      if (!confirm('Delete this review permanently?')) return;
+      try { await api(`/api/admin/testimonials/${b.dataset.rdel}`, { method: 'DELETE' }); toast('Review deleted'); renderReviews(); } catch (e) { toast(e.message, true); }
     });
   }
 
